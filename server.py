@@ -1,4 +1,5 @@
 """A slow origin: every page takes 300 ms and says which pod made it."""
+
 import os
 import signal
 import time
@@ -22,7 +23,9 @@ class Origin(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "public, s-maxage=120" if cacheable else "no-store")
+        self.send_header(
+            "Cache-Control", "public, s-maxage=120" if cacheable else "no-store"
+        )
         self.end_headers()
         self.wfile.write(data)
 
