@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: origin
+  labels:
+    app: origin
+spec:
+  selector:
+    app: origin
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
