@@ -1,11 +1,12 @@
 """A slow origin: every page takes 300 ms and says which pod made it."""
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 import signal
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 POD = os.environ.get("POD_NAME", "local")
 DELAY = float(os.environ.get("ORIGIN_DELAY", "0.3"))
+
 
 class Origin(BaseHTTPRequestHandler):
     def do_GET(self):
