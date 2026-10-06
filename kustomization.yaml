@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 02-origin.yaml
+  - 03-origin-service.yaml
+  - 04-varnish.yaml
+  - 05-varnish-service.yaml
+configMapGenerator:
+  - name: origin-code
+    files:
+      - server.py
+  - name: varnish-vcl
+    files:
+      - default.vcl

@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load
+  labels:
+    app: load
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: load
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: load
+          image: python:3.13-alpine
+          command: ["python", "/app/load.py"]
+          env:
+            - name: TARGET
+              value: "http://varnish"
+            - name: URLS
+              value: "200"
+            - name: RATE
+              value: "20"
+            - name: SECONDS
+              value: "360"
+            - name: WORKERS
+              value: "8"
+            - name: SEED
+              value: "1"
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      volumes:
+        - name: code
+          configMap:
+            name: load-code

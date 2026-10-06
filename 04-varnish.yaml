@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: varnish
+  labels:
+    app: varnish
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: varnish
+  template:
+    metadata:
+      labels:
+        app: varnish
+    spec:
+      containers:
+        - name: varnish
+          image: varnish:7.7
+          command: ["varnishd"]
+          args:
+            - "-F"
+            - "-n"
+            - "/tmp/varnish"
+            - "-f"
+            - "/vcl/default.vcl"
+            - "-a"
+            - "http=:8080,HTTP"
+            - "-s"
+            - "malloc,64m"
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: vcl
+              mountPath: /vcl
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: vcl
+          configMap:
+            name: varnish-vcl
