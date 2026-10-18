@@ -15,6 +15,14 @@ spec:
       labels:
         app: varnish
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          labelSelector:
+            matchLabels:
+              app: varnish
       containers:
         - name: varnish
           image: varnish:7.7
@@ -52,11 +60,11 @@ spec:
               port: http
             periodSeconds: 10
             timeoutSeconds: 1
-            failureThreshold: 3
+            failureThreshold: 6
           resources:
             requests:
               cpu: 100m
-              memory: 128Mi
+              memory: 256Mi
             limits:
               memory: 256Mi
       volumes:
