@@ -1,0 +1,29 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: origin
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: origin
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: varnish
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: varnish
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: router
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: router

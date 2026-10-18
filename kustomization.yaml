@@ -10,6 +10,7 @@ resources:
   - 08-varnish-pods-service.yaml
   - 09-router.yaml
   - 10-router-service.yaml
+  - 11-disruption-budgets.yaml
 configMapGenerator:
   - name: origin-code
     files:
