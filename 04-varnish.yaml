@@ -29,6 +29,8 @@ spec:
             - "http=:8080,HTTP"
             - "-s"
             - "malloc,64m"
+            - "-s"
+            - "Transient=malloc,32m"
           ports:
             - name: http
               containerPort: 8080
@@ -36,16 +38,20 @@ spec:
             - name: vcl
               mountPath: /vcl
               readOnly: true
+            - name: workdir
+              mountPath: /tmp/varnish
           readinessProbe:
             httpGet:
               path: /healthz
               port: http
             periodSeconds: 5
+            timeoutSeconds: 1
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
             periodSeconds: 10
+            timeoutSeconds: 1
             failureThreshold: 3
           resources:
             requests:
@@ -57,3 +63,7 @@ spec:
         - name: vcl
           configMap:
             name: varnish-vcl
+        - name: workdir
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
