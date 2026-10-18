@@ -1,11 +1,12 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: varnish
   labels:
     app: varnish
 spec:
-  replicas: 1
+  serviceName: varnish-pods
+  replicas: 2
   selector:
     matchLabels:
       app: varnish

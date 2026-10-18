@@ -10,6 +10,7 @@ sub vcl_backend_response {
 }
 
 sub vcl_recv {
+    set req.http.Host = "lab";
     if (req.url == "/healthz") {
         return (synth(200, "ok"));
     }

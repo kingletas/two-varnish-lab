@@ -5,6 +5,9 @@ resources:
   - 03-origin-service.yaml
   - 04-varnish.yaml
   - 05-varnish-service.yaml
+  - 08-varnish-pods-service.yaml
+  - 09-router.yaml
+  - 10-router-service.yaml
 configMapGenerator:
   - name: origin-code
     files:
@@ -12,3 +15,6 @@ configMapGenerator:
   - name: varnish-vcl
     files:
       - default.vcl
+  - name: router-config
+    files:
+      - haproxy.cfg

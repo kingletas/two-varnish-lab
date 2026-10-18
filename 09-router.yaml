@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: router
+  labels:
+    app: router
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: router
+  template:
+    metadata:
+      labels:
+        app: router
+    spec:
+      containers:
+        - name: haproxy
+          image: haproxy:3.2-alpine
+          args: ["haproxy", "-f", "/cfg/haproxy.cfg"]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: stats
+              containerPort: 8404
+          volumeMounts:
+            - name: cfg
+              mountPath: /cfg
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: cfg
+          configMap:
+            name: router-config
