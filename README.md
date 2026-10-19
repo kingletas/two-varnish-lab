@@ -60,7 +60,7 @@ kubectl -n lab wait --for=condition=complete job/load --timeout=600s
 kubectl -n lab logs job/load
 ```
 
-If you'd rather build it than run it, [docs/guide/](docs/guide/README.md) has you type every file yourself, one part at a time, with the output you should see at each step.
+If you'd rather build it than run it, [docs/guide/](docs/guide/README.md) walks you through building it yourself, file by file, with the output you should see at each step.
 
 ## What it doesn't show
 

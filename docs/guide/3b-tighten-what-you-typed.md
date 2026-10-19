@@ -367,7 +367,7 @@ shmem 84295680
 **Why:**
 
 - **The same 84 MB, and a different kind of memory.** Before, it was the kernel's copy of a file on disk, which the kernel may drop when memory is short and read back later. Now it's the only copy. It can't be dropped, and it counts against the pod's limit for as long as the pod lives.
-- **So the limit has to include it, and it does:** in the run behind this guide each cache used about 105 MB after a full load, against 256Mi. This is also why Part 2's small experiment, the copy that survived at 64Mi, shouldn't survive now. That wasn't tried again.
+- **So the limit has to include it, and it does:** in the sample run behind this guide each cache used a little over 100 MB after a full load, against 256Mi. That figure wasn't written down. This is also why Part 2's small experiment, the copy that survived at 64Mi, shouldn't survive now. That wasn't tried again.
 - **`sizeLimit: 128Mi` is a ceiling on the folder,** not a reservation. `df` shows 128M with 81M used.
 - **`rw`, and no `noexec` on the mount line.** Varnish compiled your VCL into this folder and loaded it from there, which is why the pod came up at all. A mount that forbade running files would have stopped it at start.
 - **The pod now has an `emptyDir`.** Hold that for step 8.
