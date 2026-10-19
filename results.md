@@ -5,7 +5,9 @@
 
 ## Measured on the published files
 
-One run of each, the drains twice, on 18 and 19 October 2026, on a fresh clone built on a new three-node kind cluster (kind 0.32, Kubernetes 1.36.1, Varnish 7.7, HAProxy 3.2) with `kubectl apply -k .`. Every run is the same cycle: delete the last load, restart both caches so they start empty, wait until both routers see both caches up, start the load (200 URLs, 20/s, 360 s, 8 workers, seed 1). The kill and the drain happen 180 s in, in the quiet stretch between two waves of expiry.
+One run of each, the drains twice, on 18 and 19 October 2026, on a fresh clone built on a new three-node kind cluster (kind 0.32, Kubernetes 1.36.1, Varnish 7.7, HAProxy 3.2) with `kubectl apply -k .`.
+
+Every run is the same cycle: delete the last load, restart both caches so they start empty, wait until both routers see both caches up, start the load (200 URLs, 20/s, 360 s, 8 workers, seed 1). The kill and the drain happen 180 s in, in the quiet stretch between two waves of expiry.
 
 | Run | What happened | Misses | Failed | Hit rate | Worst 10 s p95 ms |
 |---|---|---|---|---|---|
