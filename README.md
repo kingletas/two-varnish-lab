@@ -14,7 +14,7 @@ This lab puts two Varnish caches behind HAProxy, which sends each URL to the sam
 
 ## What it found
 
-One run each, each drain twice, on a fresh clone and a new cluster. The load asks for 200 pages at 20 requests a second for six minutes. The kill and the drain happen 180 seconds in.
+One run each (the drains twice), on a fresh clone and a new cluster. The load asks for 200 pages at 20 requests a second for six minutes. The kill and the drain happen 180 seconds in.
 
 | Run | What happened | Misses | Failed | Hit rate |
 |---|---|---|---|---|
@@ -28,7 +28,7 @@ One run each, each drain twice, on a fresh clone and a new cluster. The load ask
 
 - **Routing by URL halves what reaches the origin.** 600 misses against 1178 for the same traffic, because each page lives in one cache instead of both. 600 is as low as it goes: the origin lets a page be cached for two minutes, so each of the 200 pages is fetched once every two minutes.
 - **Losing a cache costs its pages once, and fails nothing.** 126 misses in the minute after the kill, against 3 in the same minute of the router run. The StatefulSet brings `varnish-1` back empty under the same name within seconds, and its pages are fetched once more.
-- **A drain under load failed 9 and 11 requests until the router got a 5 s `preStop` sleep; with it, two more drains failed none.** When Kubernetes evicts a pod, it takes the pod out of the Service and sends it the stop signal at the same moment, and the two race. For a second or so the Service can still send new requests to a router whose HAProxy has already closed its listener, and those were most likely the ones refused. The sleep makes the pod wait before it gets the signal, so by the time HAProxy stops listening nobody is sending to it. The grace period has to be longer than the sleep.
+- **A drain under load failed 9 and 11 requests; with a 5 s `preStop` sleep on the router, two more drains failed none.** When Kubernetes evicts a pod, it takes the pod out of the Service and sends it the stop signal at the same moment, and the two race. For a second or so the Service can still send new requests to a router whose HAProxy has already closed its listener, and those were most likely the ones refused. The sleep makes the pod wait before it gets the signal, so by the time HAProxy stops listening nobody is sending to it. The grace period has to be longer than the sleep.
 
 Your numbers will differ by a few. The shape is what to read. Every run, with its setup, is in [results.md](results.md).
 
