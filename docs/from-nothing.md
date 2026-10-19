@@ -1,6 +1,6 @@
 # From nothing to a measured two-varnish-lab
 
-By the end of this page you will have two Varnish caches running on a Kubernetes cluster on your own laptop, and a number that says how well they share the work.
+By the end of this page you'll have two Varnish caches running on a Kubernetes cluster on your own laptop, and a number that says how well they share the work.
 
 ## Contents
 
@@ -16,7 +16,7 @@ By the end of this page you will have two Varnish caches running on a Kubernetes
 
 ## What this is
 
-One Varnish in front of a web application is a single point of failure: when it goes, every request lands on the application at once. Two Varnish behind a plain load balancer remove that, but each caches the same pages separately, so the application does twice the work to fill them. This lab puts two Varnish behind an HAProxy that sends each URL to the same cache every time, and measures what that is worth.
+One Varnish in front of a web application is a single point of failure: when it goes, every request lands on the application at once. Two Varnish behind a plain load balancer remove that, but each caches the same pages separately, so the application does twice the work to fill them. This lab puts two Varnish behind an HAProxy that sends each URL to the same cache every time, and measures what that's worth.
 
 Everything here is test and research: a laptop cluster, an invented origin that takes 300 ms per page, and an invented load. Nothing in it is built or hardened for production.
 
@@ -86,7 +86,7 @@ p95_ms=303
 
 ## Step 5: the same load without routing by URL
 
-A load is a Job, and a finished Job is not run again, so delete it first. Restarting the caches empties them, so the second run starts as cold as the first.
+A load is a Job, and a finished Job isn't run again, so delete it first. Restarting the caches empties them, so the second run starts as cold as the first.
 
 ```bash
 kubectl -n lab delete job load

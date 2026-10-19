@@ -19,7 +19,8 @@ One run of each, the drains twice, on 18 and 19 October 2026, on a fresh clone b
 
 - **Routing by URL halves what reaches the origin**: 600 misses against 1178 for the same traffic, because each page lives in one cache instead of both.
 - **Losing a cache costs its pages once**: 126 misses in the 60 s after the kill, against 3 in the same minute of the router run, and no failed request.
-- **A drain under load failed 9 and 11 requests** in two runs, and **none once the router had a preStop sleep**, in two more. A drain evicts a router as well as a cache. Kubernetes takes the pod out of the Service and signals it at the same moment, and HAProxy's stop signal in this image is a soft stop that closes its listener at once, so requests the Service still sent it in that moment were most likely refused; the refusals themselves were not logged. With a 5 s sleep before the signal, the evicted router logged its last request as it was evicted and stopped cleanly 6 s later, and the worst 10 s window fell from about 1800 ms to about 310.
+- **A drain under load failed 9 and 11 requests** in two runs, and **none once the router had a preStop sleep**, in two more. A drain evicts a router as well as a cache, and Kubernetes takes that pod out of the Service and signals it at the same moment. This image's stop signal is HAProxy's soft stop, which closes the listener at once, so requests the Service still sent it in that moment were most likely refused. The refusals themselves weren't logged.
+- **With a 5 s sleep before the signal**, the evicted router logged its last request as it was evicted and stopped cleanly 6 s later. The worst 10 s window fell from about 1800 ms to about 310.
 - An earlier try at the router run, with the load started before the routers had marked a restarted cache up again, gave 611 misses: its first pages went to the other cache.
 
 Your numbers will differ by a few; the shape is what to read.
