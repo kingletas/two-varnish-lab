@@ -1,0 +1,18 @@
+# The same load sent to the plain varnish Service instead of the router, which
+# spreads requests across both caches without regard to the URL. Run it with
+# `kubectl apply -k load-via-service` to measure what routing by URL is worth.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../load
+patches:
+  - target:
+      kind: Job
+      name: load
+    patch: |-
+      - op: test
+        path: /spec/template/spec/containers/0/env/0/name
+        value: TARGET
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: http://varnish
