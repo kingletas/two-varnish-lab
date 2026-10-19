@@ -1,6 +1,6 @@
 # Part 2: one Varnish in front
 
-**What you have at the end:** one Varnish caching the origin, its config kept as a file in the folder and fed in through Kustomize, a VCL typo you broke on purpose and read about in the logs, and **the first of the lab's three numbers: the hit rate of one cache, measured twice.**
+**What you have at the end:** one Varnish caching the origin, its config kept as a file in the folder and fed in through Kustomize, a VCL typo you broke on purpose and read about in the logs, and **the hit rate of one cache, measured twice: the baseline the lab's three numbers are compared with.**
 
 ## 1. Let Kustomize own the origin's code
 
@@ -111,7 +111,7 @@ sub vcl_deliver {
 **Why:**
 
 - **`backend origin`** points Varnish at the Service from Part 1 step 7, not at a pod. Pods change addresses; the Service name does not. Varnish looks the name up once, when the VCL loads.
-- **`vcl_recv` runs when a request arrives.** For `/healthz`, Varnish answers by itself (`synth` makes a response up) and never asks the origin. A readiness check that depended on the origin would pull the cache out of service exactly when the origin is struggling, which is when the cache matters most. That's the choice, and the other way was ruled out.
+- **`vcl_recv` runs when a request arrives.** For `/healthz`, Varnish answers by itself (`synth` makes a response up) and never asks the origin. A readiness check that depended on the origin would pull the cache out of service exactly when the origin is struggling, which is when the cache matters most.
 - **Every other request falls through to Varnish's built-in rules.** They cache a plain GET that has no cookie, and they obey the origin's `s-maxage=120` from Part 1 step 2. We write nothing for that.
 
   Varnish's own default lifetime happens to be 120 seconds too, so the lab by itself can't show which of the two is at work. It was shown apart for this guide: with the default turned down to 5 seconds, a page was still a hit 8 seconds later, so the header is what counts.
@@ -381,7 +381,7 @@ kubectl get pods
 
 ```text
 configmap/origin-code-hb96279hb7 unchanged
-configmap/varnish-vcl-h6449tgk29 created
+configmap/varnish-vcl-h8k97c96g7 created
 service/origin unchanged
 service/varnish unchanged
 deployment.apps/origin unchanged
@@ -390,7 +390,7 @@ NAME                     DATA   AGE
 kube-root-ca.crt         1      76s
 origin-code-hb96279hb7   1      54s
 varnish-vcl-9k87kdmgcc   1      43s
-varnish-vcl-h6449tgk29   1      1s
+varnish-vcl-h8k97c96g7   1      1s
 deployment "varnish" successfully rolled out
 NAME                       READY   STATUS        RESTARTS   AGE
 origin-75b8688f98-8kvrx    1/1     Running       0          67s
@@ -728,7 +728,7 @@ kubectl rollout status deployment/varnish
 kubectl apply -f 07-load-job.yaml
 ```
 
-The run takes about six and a half minutes. Wait for it to finish:
+The load runs for 360 seconds, plus the time its pod takes to start. Wait for it to finish:
 
 ```bash
 kubectl wait --for=condition=complete job/load --timeout=600s
@@ -820,7 +820,7 @@ The first number is what the kernel counts against the limit, in bytes: about 10
 
 File pages count against the limit, but the kernel can drop them when memory is tight. That was tested: a copy of this Deployment with a 64Mi limit took the same load at the same time. It gave the same 6600 hits and 600 misses and the same latency, it was never killed, and it sat at 63 MB with its file pages cut to 42 MB.
 
-So the number to watch is `anon`. It's the part that can't be dropped, and it grows as the cache fills. A cache is killed when that part reaches the limit, and this lab's 50-byte pages never come near it.
+So the number to watch is `anon`. It's the part that can't be dropped, and it grows as the cache fills. A cache is killed when that part reaches the limit, and this lab's 200 pages, 74,690 bytes in all in the reading above (`SMA.s0.g_bytes`), never come near it.
 
 **Two of these numbers depend on when you look.** Read them within two minutes of the load ending. Every page lives 120 seconds, and after that Varnish throws it away, so four minutes later `n_object` and `g_bytes` both read 0. That's the lifetime doing its job, and an empty cache telling you so.
 
@@ -921,16 +921,8 @@ kubectl apply -f 06-load-code.yaml
 
 That was run on an emptied namespace, and both ConfigMaps came back under the same hashed names.
 
-## What you can now say, and what you can't yet
+## What this doesn't cover
 
-| You can say | Because you did it |
-|---|---|
-| I keep a cache's config in a file and feed it through Kustomize, so a config change rolls the pods without a manual restart | Steps 1 and 6 |
-| I have watched a VCL that doesn't compile stall a rollout while the old pod kept serving, and found the compiler's message in the logs | Step 7 |
-| I can read hit and miss counters inside a running Varnish and check them against the client's count and the origin's log | Steps 5, 9 and 10 |
-| I measured one Varnish's hit rate twice, under a load whose every parameter I can state, on a local cluster | Steps 8 to 11 |
-| I know why a cache's size must stay under its pod's memory limit, and I have looked at the margin | Steps 3 and 10 |
-
-**Not yet:** anything about two caches, which is Part 3; what the number would be for real traffic, which isn't this traffic; sizing a cache for production; or what happens to a cache that's restarted under load, which is Part 4. The number you measured belongs to this load on this laptop.
+Two caches, which is Part 3; what the number would be for real traffic, which isn't this traffic; sizing a cache for production; or what happens to a cache that's restarted under load, which is Part 4. The number you measured belongs to this load on this laptop.
 
 **Next:** [Part 3: two Varnish, and the problem](3-two-varnish-and-the-problem.md)

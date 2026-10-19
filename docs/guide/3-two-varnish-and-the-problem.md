@@ -140,7 +140,7 @@ Ask for a page no cache has seen, six times, through the `varnish` Service:
 kubectl run probe --image=busybox:1.37 --restart=Never --rm -i --quiet -- sh -c 'for i in 1 2 3 4 5 6; do wget -S -qO- http://varnish/spread 2>&1 | grep X-Cache; done'
 ```
 
-**You should see** something like this. The order is luck; the count of misses is not:
+**You should see** something like this. The order is luck, and so is whether you see one miss or two:
 
 ```text
   X-Cache: MISS
@@ -228,7 +228,7 @@ MAIN.cache_miss            589         1.58 Cache misses
 1175
 ```
 
-**0.837, down from 0.917.** The misses went from 600 to 1175, and the three witnesses still agree: 589 and 586 add up to 1175, and the origin served 1175 more pages than before the run.
+**0.837, down from 0.917.** These numbers are one sample run, made while this guide was written, not the published runs; the plain-Service run in [results.md](../../results.md) gave `miss=1178` and `hit_rate=0.836`. In the sample, the misses went from 600 to 1175, and the three witnesses still agree: 589 and 586 add up to 1175, and the origin served 1175 more pages than before the run.
 
 Now run the whole cycle a second time:
 
@@ -459,7 +459,7 @@ Same name, new address, age in seconds. The address changed and the name did not
 - **Port 8080 here, not 80.** There's no Service address to translate a port, so a client reaches the pod directly on the port the pod listens on.
 - **The old `varnish` Service still works.** Its selector is the label `app: varnish`, and the new pods carry it. A Service doesn't care what kind made the pods.
 - **A StatefulSet starts its pods in order and replaces them one at a time, highest number first.** For a cache that's what you want: never both empty at once.
-- **What a StatefulSet usually comes with is a disk per pod.** Not here: the cache lives in memory and a new `varnish-0` starts empty. You're using the StatefulSet for the name alone. Say that plainly if you're asked why a cache is a StatefulSet.
+- **What a StatefulSet usually comes with is a disk per pod.** Not here: the cache lives in memory and a new `varnish-0` starts empty. You're using the StatefulSet for the name alone.
 
 ## 6. Write the router's config, and check it before the cluster sees it
 
@@ -523,7 +523,9 @@ Configuration file is valid
 
 **Why, block by block:**
 
-- **`balance uri` with `hash-type consistent`** is the whole idea. `balance uri` hashes the path of the URL to choose a server. `consistent` decides what happens when a server goes away: only the URLs that belonged to it move, and the rest stay where they were. Without it, losing one cache would reshuffle nearly every URL and empty both.
+- **`balance uri` with `hash-type consistent`** is the whole idea. `balance uri` hashes the path of the URL to choose a server. `consistent` decides what happens when a server goes away: only the URLs that belonged to it move, and the rest stay where they were.
+
+  With two caches you can't see the difference, because every URL goes to the survivor either way. With three or more, the default would move many URLs between the caches that are still up, and they'd go cold too.
 - **The servers are listed by name, one line each.** HAProxy can also fill its list from DNS by itself. Then which pod lands in which slot depends on the order the DNS answer arrived in, and two routers can disagree about which cache owns a URL. Nothing errors when they do; the hit rate just sinks back toward step 4's. Two names typed out can't disagree.
 - **The full name, ending in `.svc.cluster.local`.** Inside a pod, `varnish-0.varnish-pods` works because the pod's DNS settings add the rest. HAProxy does its own lookups and doesn't add anything, so it gets the whole name. `${POD_NAMESPACE}` is filled in from the pod's environment; step 7 puts it there.
 - **`resolvers cluster` and `init-addr none`.** A pod's address changes when it's replaced (you just saw it). `resolvers` tells HAProxy to keep asking the cluster's DNS, and `init-addr none` lets it start before a name resolves, with that server marked down, where its default is to refuse to start.
@@ -562,7 +564,7 @@ docker run --rm -e POD_NAMESPACE=lab -v "$PWD/haproxy.cfg:/cfg/haproxy.cfg:ro" h
 
 **Why HAProxy, and what was ruled out.** It's the least typing that shows the mechanism, its health checks are written out, and it will tell you per server what it sent where. NGINX with `hash $request_uri consistent` was the close second.
 
-On a real cluster today the answer is a Gateway API controller with a consistent-hash policy: it does this same thing and hides it, which is the wrong trade for a lab whose point is to see it. The Service's session affinity isn't an option at all, for the reason in step 3.
+On a real cluster today the answer is a Gateway API controller that supports a consistent-hash policy: it does this same thing and hides it, which is the wrong trade for a lab whose point is to see it. The Service's session affinity isn't an option at all, for the reason in step 3.
 
 ## 7. Put the router on the cluster
 
@@ -749,7 +751,7 @@ kubectl run probe --image=busybox:1.37 --restart=Never --rm -i --quiet -- sh -c 
   X-Cache: MISS
   Connection: close
   
-path=/shoes pod=origin-75b8688f98-hwhrz made=12:20:07
+path=/shoes pod=origin-75b8688f98-hwhrz made=14:20:07
 ```
 
 ```text
@@ -766,14 +768,14 @@ path=/shoes pod=origin-75b8688f98-hwhrz made=12:20:07
   x-cache: MISS
   connection: close
   
-path=/shoes pod=origin-75b8688f98-hwhrz made=12:20:10
+path=/shoes pod=origin-75b8688f98-hwhrz made=14:20:10
 ```
 
 The same headers, and every name in lower case the second time. HAProxy writes header names in lower case when it passes a response on. HTTP says a header's name isn't case-sensitive, so nothing is wrong. But `grep X-Cache` is case-sensitive, and it finds nothing in the second answer. **From here on the command says `grep -i x-cache`.** The second answer may say `HIT` for you, if the router picked the cache that had just answered the first.
 
-This one cost a run. Behind this guide, the old command through the router printed a single line, `pod lab/probe terminated (Error)`, four times over, while the caches' own counters showed every request served. `grep` found no line, a `grep` that finds nothing exits with 1, and the pod reports its last command's exit code.
+Through the router, the old command prints a single line, `pod lab/probe terminated (Error)`, while the caches' own counters show every request served. `grep` found no line, a `grep` that finds nothing exits with 1, and the pod reports its last command's exit code. The error is in the tool you look with, not in the router.
 
-An error from the tool you look with isn't always an error in the thing you're looking at. HAProxy can be told to restore the capitals for a client that can't cope (`h1-case-adjust`); the better fix is a client that doesn't care, and `-i` is that.
+HAProxy can be told to restore the capitals for a client that can't cope (`h1-case-adjust`); the better fix is a client that doesn't care, and `-i` is that.
 
 Now ask for a new page six times, the test from step 3, but through the router:
 
@@ -887,7 +889,9 @@ stats,FRONTEND,OPEN
 stats,BACKEND,UP
 ```
 
-**`MAINT (resolution)`.** Both routers have set `varnish-1` aside, because the name they were given for it doesn't resolve to anything. The group, `BACKEND`, is still `UP`, since one cache is enough to answer, so the readiness probe passed, the rollout finished, and `varnish-0` served every request. That's why you saw one miss and five hits: it's one cache again.
+**`MAINT (resolution)`.** Both routers have set `varnish-1` aside, because the name they were given for it doesn't resolve to anything. The group, `BACKEND`, is still `UP`, since one cache is enough to answer, so the readiness probe passed, the rollout finished, and `varnish-0` served every request.
+
+So the six requests went to one cache. One miss and five hits is also what a working router gives for one page, so that test couldn't show the typo. Only the status page shows it.
 
 The router's log tells you the same thing by what it leaves out:
 
@@ -1218,17 +1222,8 @@ git add default.vcl 04-varnish.yaml 07-load-job.yaml 08-varnish-pods-service.yam
 git commit -m "Two Varnish with stable names behind an HAProxy that routes by URL, and both hit rates measured"
 ```
 
-## What you can now say, and what you can't yet
+## What this doesn't cover
 
-| You can say | Because you did it |
-|---|---|
-| I measured what a second cache costs behind a plain Service: the hit rate went from 0.917 to 0.837 and the origin's work nearly doubled | Step 4 |
-| I can explain why a Service can't fix that, and why session affinity is the wrong tool | Step 3 |
-| I ran a cache as a StatefulSet with a headless Service, for the stable names and not for storage, and I can say why | Step 5 |
-| I routed by URL with consistent hashing in HAProxy and got the single cache's hit rate back from two caches | Steps 6, 7 and 9 |
-| I have seen a config mistake that every check passed and every request survived, and I know where to look for it | Step 8 |
-| I know the difference between a pod's identity and its contents, because I replaced one and watched which survived | Step 10 |
-
-**Not yet:** what happens when a cache dies under load, how long the router takes to notice, how many requests land in that gap, and how long the pages take to warm back. That's the third number, and Part 4. Nor anything about real traffic: 200 URLs asked evenly isn't how a store is browsed, and the split between the caches would be different with a different set of URLs.
+What happens when a cache dies under load, how long the router takes to notice, how many requests land in that gap, and how long the pages take to warm back. That's the third number, and Part 4. Nor real traffic: 200 URLs asked evenly isn't how a store is browsed, and the split between the caches would be different with a different set of URLs.
 
 **Next:** [Between Parts 3 and 4: tighten what you typed](3b-tighten-what-you-typed.md)

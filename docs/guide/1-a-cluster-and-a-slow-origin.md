@@ -109,6 +109,7 @@ Stop the server with Ctrl-C.
 **Why this way:**
 
 - **Run it before you containerize it.** If it fails on the cluster later, you already know the code isn't the reason.
+- **`ORIGIN_DELAY` sets the 300 ms.** It defaults to `0.3` seconds, and nothing in the lab sets it.
 - **`s-maxage=120`** tells a shared cache it may keep the page for two minutes. That header is what Varnish will obey in Part 2.
 - **`/healthz` answers at once and is never cached.** The cluster will ask it "are you alive?" every few seconds, and that question must not wait 300 ms or get a stale answer.
 - **Any other path is a page.** `/shoes`, `/a`, `/anything` all return 200. That gives us as many distinct URLs as we want for the cache test. Remember it: it matters in step 8.
@@ -355,7 +356,7 @@ kubectl rollout status deployment/origin
 - **Liveness is the patient one, on purpose.** Readiness gives up after 15 seconds here (every 5 seconds, three failures, the default) and liveness after 30 (every 10, three failures). A failed readiness check costs nothing, because the pod comes back into the Service by itself. A failed liveness check kills a process. So liveness waits longer, and it never asks about anything outside its own process.
 - **They are different questions**, even when they ask the same URL. Readiness protects your users; liveness protects you from a hung process.
 - **`requests`** is what the scheduler reserves for the pod when it picks a node: a twentieth of a core and 32 MiB.
-- **`limits.memory`** is a hard ceiling: past 64 MiB the container is killed. **There's no CPU limit on purpose.** A CPU limit throttles a container even when the node is idle, so the usual advice is a CPU request and no CPU limit.
+- **`limits.memory`** is a hard ceiling: past 64 MiB the container is killed. **There's no CPU limit on purpose.** A CPU limit can throttle a container even when the node has CPU to spare, so a common recommendation is a CPU request and no CPU limit.
 
 **Now break it.** In `02-origin.yaml`, change the readiness probe's port from `http` to `9999`, so the readiness probe reads:
 
@@ -420,7 +421,7 @@ kubectl apply -f 02-origin.yaml
 
 **Why not `kubectl rollout undo`:** it works, and kubectl itself warns you about it. The cluster would go back, and your file would still say `9999`. **The file is the truth.** Fix the file and apply it, so the folder and the cluster never disagree.
 
-> **What the first draft of this step got wrong.** The first version broke the probe by changing the *path* to `/nope`. On the cluster the rollout succeeded anyway. **Why:** this origin answers 200 for every path, which is what step 2 set up on purpose. A health check that can never fail isn't a health check. The port is what makes it fail here. In a real application, make sure the health path is one that can say no.
+**Why the port and not the path:** changing the probe's path to `/nope` wouldn't stall anything, because this origin answers 200 for every path, as step 2 set it up to. The rollout would succeed. The port is what makes the probe fail here. In a real application, make sure the health path is one that can answer with a failure.
 
 ## 9. Why does a pod take thirty seconds to die?
 
@@ -503,7 +504,7 @@ time kubectl delete pod origin-d48794478-54ctb
 
 **You should see** about one second. It was 1.02 here.
 
-**Why this fix and not a shorter grace period:** lowering the 30 seconds only makes the kill come sooner, and the process still ignores the request. **What you have now is a server that stops when it's asked. That's half of what the term *graceful shutdown* means,** and a reviewer looks for both halves in anything that runs on a cluster.
+**Why this fix and not a shorter grace period:** lowering the 30 seconds only makes the kill come sooner, and the process still ignores the request. **What you have now is a server that stops when it's asked. That's half of what the term *graceful shutdown* means.**
 
 This server exits at once, so a page it was in the middle of sending is cut off, and for a moment the Service can still send it a request it will never answer. Finishing what's in flight is the other half. Part 4 teaches it, because that's where the load can show the difference.
 
@@ -583,15 +584,8 @@ kubectl config set-context --current --namespace=lab
 kubectl apply -f 01-origin-code.yaml -f 02-origin.yaml -f 03-origin-service.yaml
 ```
 
-## What you can now say, and what you can't yet
+## What this doesn't cover
 
-| You can say | Because you did it |
-|---|---|
-| I have run a multi-node Kubernetes cluster locally and deployed to it from manifests I wrote | Steps 3 to 7 |
-| I know what readiness and liveness probes do to a rollout, and I have watched a bad release stall without an outage | Step 8 |
-| I have fixed a container that ignored SIGTERM, and measured the difference | Step 9 |
-| I have drained a node and seen where the pods went | Step 10 |
-
-**Not yet:** anything about Kubernetes in production, Ingress, Helm, autoscaling, or a managed service such as EKS. A local lab is a local lab, and the page says so.
+Kubernetes in production, Ingress, Helm, autoscaling, or a managed service such as EKS.
 
 **Next:** [Part 2: one Varnish in front](2-one-varnish-in-front.md)

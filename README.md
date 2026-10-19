@@ -21,10 +21,10 @@ One run each (the drains twice), on a fresh clone and a new cluster. The load as
 | Router | Each URL goes to the same cache | 600 | 0 | 0.917 |
 | Plain Service | The same load, sent to either cache | 1178 | 0 | 0.836 |
 | Kill | `varnish-1` deleted mid-run | 728 | 0 | 0.899 |
-| Drain, before `preStop` | A worker drained mid-run, before the router had its `preStop` sleep | 699 | 9 | 0.902 |
+| Drain, before preStop | A worker drained mid-run, before the router had its `preStop` sleep | 699 | 9 | 0.902 |
 | Drain, again | The same | 742 | 11 | 0.895 |
-| Drain, with `preStop` | The same, after the router got a 5 s `preStop` sleep | 613 | 0 | 0.915 |
-| Drain, with `preStop`, again | The same | 729 | 0 | 0.899 |
+| Drain, router preStop | The same, after the router got a 5 s `preStop` sleep | 613 | 0 | 0.915 |
+| Drain, router preStop, again | The same | 729 | 0 | 0.899 |
 
 - **Routing by URL halves what reaches the origin.** 600 misses against 1178 for the same traffic, because each page lives in one cache instead of both. 600 is as low as it goes: the origin lets a page be cached for two minutes, so each of the 200 pages is fetched once every two minutes.
 - **Losing a cache costs its pages once, and fails nothing.** 126 misses in the minute after the kill, against 3 in the same minute of the router run. The StatefulSet brings `varnish-1` back empty under the same name within seconds, and its pages are fetched once more.
@@ -59,6 +59,8 @@ kubectl -n lab wait --for=condition=complete job/load --timeout=600s
 ```bash
 kubectl -n lab logs job/load
 ```
+
+If you'd rather build it than run it, [docs/guide/](docs/guide/README.md) has you type every file yourself, one part at a time, with the output you should see at each step.
 
 ## What it doesn't show
 

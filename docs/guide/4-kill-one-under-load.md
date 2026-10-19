@@ -2,7 +2,7 @@
 
 Part 3 replaced a cache with nothing running and watched which pages survived. This part does it under load, and then does what a node's maintenance does: a drain. **Every run here is the same six-minute load from Part 2, so the only thing that changes between two runs is the thing you changed.** You start with a timeline in the load, so a run shows *when* something happened and not only how much.
 
-By the end you have the third number, two lines in the router you wouldn't have known to write, pods spread across both workers, and a budget that says how many of each may go at once.
+By the end you have the third number, two changes to the router's config for losing a cache, pods spread across both workers, a budget that says how many of each may go at once, and a router that finishes its requests before it stops.
 
 ## 1. Give the load a timeline
 
@@ -101,6 +101,7 @@ ruff format --check load/load.py
 
 **Why:**
 
+- **`WINDOW` is the timeline's step:** 10 seconds unless the Job sets it, and `load/job.yaml` doesn't.
 - **`start` moved into `main`.** Before, each worker kept its own clock. Now all eight share one, so "second 185" means the same moment in every worker's results.
 - **`other` is everything that's neither a hit nor a miss:** a request that timed out, a refused connection, an error page. In every run so far it was 0. In this part it's the number that matters most.
 - **A worker waits for its own request.** If one request hangs for five seconds, that worker's next requests start late and then catch up in a burst. A window with fewer than 200 requests, followed by one with more, is that worker catching up. You'll see it.
@@ -180,9 +181,9 @@ window_s requests miss other p95_ms
 
 **Why:**
 
-- **Misses come in waves, two minutes apart.** The origin says `s-maxage=120`, and grace is 0, so every page expires two minutes after it was fetched, and the next request for it's a miss. The first wave fills the caches; each later wave is the same pages expiring again, a little more spread out each time.
-- **Between the waves, nothing misses.** From 180 to 230 seconds the caches answer everything from memory. **That quiet stretch is where you kill a cache**, so every extra miss is the kill's and not a wave's.
-- **The p95 column says the same thing in milliseconds:** about 300 when a window has misses (the origin's 300 ms), single digits when it has none.
+- **Misses come in waves, two minutes apart.** The origin says `s-maxage=120`, and grace is 0, so every page expires two minutes after it was fetched, and the next request for it is a miss. The first wave fills the caches; each later wave is the same pages expiring again, a little more spread out each time.
+- **Between the waves, almost nothing misses.** The six windows from 180 to 230 seconds show 1, 0, 0, 1, 1 and 0 misses. **That quiet stretch is where you kill a cache**, so nearly every extra miss is the kill's and not a wave's.
+- **The p95 column follows the misses.** When 10 or more of a window's 200 requests miss, its p95 is a miss: between 303 and 321 ms in this run, the origin's 300 ms plus a little. With 9 or fewer it's a hit, in single digits: the window at 30 seconds has 9 misses and a p95 of 5.
 
 Write down this run's ConfigMap name from `kubectl get configmap`, as in the tightening section. Every run in this part uses the same script.
 
@@ -258,11 +259,12 @@ window_s requests miss other p95_ms
      ...
 ```
 
-**114 more misses than the baseline, and 8 requests that failed.**
+**114 more misses than the baseline, and 8 requests that failed.** This is one sample run, made while this guide was written with the 2-second connect timeout. The kill in [results.md](../../results.md) ran on the finished files and gave 728 misses, 0 failed and a hit rate of 0.899.
 
 **Why:**
 
-- **114 is the dead cache's pages, each once.** `varnish-1` owns 117 of the 200 URLs (Part 3 step 11). Every one of them went cold, and the other cache lost nothing. Of the 114, 109 landed in the 25 seconds after the delete; by 45 seconds the timeline was back to the baseline's. **That's the third number:** about 58% of the pages, cold once, warm again within half a minute at 20 requests a second.
+- **114 is close to the dead cache's pages.** `varnish-1` owns 117 of the 200 URLs (Part 3 step 11). Its cache was emptied, and the other cache lost nothing. The extra misses were 114, not 117, and nothing on this page explains the missing 3.
+- **The third number.** 117 of 200 pages, 58.5%, went cold. Of the 114 extra misses, 109 landed in the 25 seconds after the delete, and 45 seconds after it the timeline was back to the baseline's.
 - **The wave moved.** The pages refilled at second 185 expire at 305, which is the spike at 310 that the baseline doesn't have.
 - **The 180 window has 170 requests and the 190 window has 230.** That's step 1's catching up: some requests hung, and their workers started their next ones late.
 - **The routers never said `DOWN`.** The new `varnish-1` was running three seconds after the delete, before a third health check could fail. So the router did nothing wrong by its own rules, and 8 requests still failed. Step 4 finds out where.
@@ -291,7 +293,7 @@ kubectl logs -l app=router --tail=-1 | awk '{split($5,t,"/")} t[5] > 1000 || ($6
 
   The failed connects are counted as queue time because a redispatch puts the request back in the queue; the connect timer shows only the last connect, the one that worked at once. `+3` near the end means three retries, and the `+` means the last one went to another server.
 - **Where the 6 seconds come from:** for a few seconds the router still had the dead pod's address. A connection to an address nobody answers on doesn't fail, it hangs, until `timeout connect 2s`. The first try and two retries each wait the full 2 seconds, which is the 6; the third retry is the one `option redispatch` moves to `varnish-0`, which fetches the page from the origin.
-- **The load gives up at 5 seconds** (`timeout=5` in `load.py`). A shopper's browser gives up sooner. So the router finished the job and logged a success one second after the customer had left. **A success in one log isn't a success for the person asking.** This is why the load counts on its own side.
+- **The load gives up at 5 seconds** (`timeout=5` in `load.py`). A person in a browser may give up sooner. So the router finished the job and logged a success one second after the client had stopped waiting. This is why the load counts on its own side.
 - **Two seconds to connect is a setting for the internet.** Inside a cluster a connection takes well under a millisecond. Waiting two seconds for one only makes a dead pod expensive.
 
 In `haproxy.cfg`, change the connect timeout from `2s` to `500ms`, so the `defaults` section reads:
@@ -374,7 +376,7 @@ hit_rate=0.898
      ...
 ```
 
-and from the router command, the slow ones now take about 1.8 seconds and succeed, and four new lines:
+and from the router command, the slow ones now take about 1.8 seconds and succeed, and four new lines. Two of them:
 
 ```text
 10.244.2.12:57370 [13/Mar/2026:14:31:20.146] web caches/varnish-1 0/0/0/-1/13 502 209 - - SH-- 3/3/1/0/0 0/0 "GET /p/81 HTTP/1.1"
@@ -471,7 +473,9 @@ hit_rate=0.896
 **Why:**
 
 - **`conn-failure` is what `retries` did already; `empty-response` is the new part:** a server that closed the connection without an answer is now tried again, elsewhere.
-- **The misses went up, run after run** (714, 729, 747). The requests the router sent to `varnish-0` while `varnish-1` was gone filled those pages in `varnish-0` too, and then `varnish-1` fetched them again when it was back. Each run moved some of the failure into extra work for the origin. That's the trade, and it's a good one.
+- **The misses rose across these three runs** (714, 729, 747) while the failures fell (8, 4, 0). Part of that is the failures: a request that fails is neither a hit nor a miss, and once it's answered it can count as a miss. The rest is most likely the requests the router sent to `varnish-0` while `varnish-1` was gone, which filled those pages in `varnish-0` too, before `varnish-1` fetched them again.
+
+  Three runs aren't a trend, though: Part 3 step 4's two runs of the same setup differed by six misses.
 - **A drain ends a pod the same way.** `kubectl delete pod` sends the process a stop signal, and Varnish stops at once, with whatever it was doing. A drain, a rollout and a node going down for maintenance all send the same signal, so step 7 meets the same failures. The harshest case, a node that dies with no signal at all, isn't in this lab.
 
 ## 5. Spread each workload across the workers
@@ -858,7 +862,7 @@ p95_ms=304
      ...
 ```
 
-**A third of the lab was taken off a node in the middle of the load, and in this run no request failed.** And after the uncordon, every pod is still on `lab-worker2`.
+**Half the lab's pods, three of six, were taken off a node in the middle of the load, and in this sample run no request failed.** And after the uncordon, every pod is still on `lab-worker2`.
 
 **Why:**
 
@@ -871,7 +875,7 @@ p95_ms=304
 
 ## 8. Let the router finish before it stops
 
-The drain in step 7 failed nothing, and that was partly luck. Two more drains of the same kind, on files the same as yours are now, failed 9 and 11 requests out of 7,200. They're the runs `Drain, before preStop` and `Drain, again` in [results.md](../../results.md), and their worst 10-second p95 was about 1,800 ms.
+The drain in step 7 failed nothing, and that was partly luck. Two more drains of the same kind, on files the same as yours are now, failed 9 and 11 requests out of 7,200. They're the runs `Drain, before preStop` and `Drain, again` in [results.md](../../results.md), and their worst 10-second p95 was 1,805 and 1,806 ms.
 
 The failed requests weren't logged anywhere: the routers that stayed logged only answers that worked. What follows is the most likely reading, which the fix supports. Nobody saw it happen.
 
@@ -1038,7 +1042,7 @@ kubectl uncordon lab-worker
 
 **You should see** `other=0`. On this repository's files, the two drains after this change, `Drain, router preStop` and `Drain, router preStop, again` in [results.md](../../results.md), failed none, against 9 and 11 before it. Their misses were 613 and 729, so read the failures, not the misses: the misses move from run to run.
 
-In those runs, the evicted router logged its last request as it was evicted and stopped cleanly 6 seconds later. The worst 10-second p95 fell from about 1,800 ms to about 310.
+In those runs, the evicted router logged its last request as it was evicted and stopped cleanly 6 seconds later. The worst 10-second p95 was 316 and 309 ms, against 1,805 and 1,806 before.
 
 ## 9. What a budget stops, and what it doesn't
 
@@ -1091,7 +1095,7 @@ varnish   N/A             1                 0                     10m
 
 ## 10. Write the numbers down
 
-Add a section to `results.md`, under the table, with your own values:
+Add a section to `results.md`, under the table. The numbers below are this guide's sample runs; put yours in their place:
 
 ```markdown
 ## Part 4: one cache lost at 185 s, under the same load
@@ -1105,12 +1109,12 @@ Add a section to `results.md`, under the table, with your own values:
 | Drain | `lab-worker` drained, spread and budgets | 716 | 0 | 0.901 | 1816 |
 | Drain | the same, router `preStop` sleep 5 s | ... | ... | ... | ... |
 
-The third number: killing the cache that owns 117 of the 200 pages sent about 114 extra requests to the origin, 109 of them in the next 25 seconds; the timeline was back to the baseline's within 45 seconds.
+The third number: killing the cache that owns 117 of the 200 pages sent 114 extra requests to the origin, 109 of them in the next 25 seconds; the timeline was back to the baseline's 45 seconds after the delete.
 ```
 
-The last row is yours alone: the run behind this guide stopped before step 8, and this repository's runs of it are in [results.md](../../results.md).
+The last row has no sample value in this guide; this repository's runs of it are in [results.md](../../results.md).
 
-**Why:** the worst-window p95 is the column the totals hide. The totals' p95 is 304 in every run. The failure only shows in the window it happened in.
+**Why:** the worst-window p95 is the column the totals hide. In every sample run in this guide the totals' p95 is between 302 and 304 ms, and the Part 2 runs in results.md give 303 and 304. The failure only shows in the window it happened in.
 
 ## 11. Commit
 
@@ -1122,19 +1126,9 @@ git add load/load.py haproxy.cfg 02-origin.yaml 04-varnish.yaml 09-router.yaml 1
 git commit -m "The load prints a timeline; the router survives a lost cache with no failed request; pods spread across workers, with disruption budgets"
 ```
 
-## What you can now say, and what you can't yet
+## What this doesn't cover
 
-| You can say | Because you did it |
-|---|---|
-| I killed a cache under load and measured the cost: which pages went cold, how many requests reached the origin, and how long it took to warm back | Step 3 |
-| I found a failure the router logged as a success, by measuring from the client's side | Step 4 |
-| I tuned a load balancer for losing a backend: a connect timeout that fits a cluster, and retrying only what's safe to retry | Step 4 |
-| I spread pods across nodes, and I know two ways a spread rule goes wrong: a node nobody may use, and a rollout counting its own old pods | Step 5 |
-| I drained a node under load with no failed request, and I know why nothing moved back after | Steps 6 and 7 |
-| I made a router finish what reaches it before it stops, and know why a drain needs that | Step 8 |
-| I know what a disruption budget stops and what it doesn't | Step 9 |
-
-**Not yet:** a cache that dies with its node and no warning, which kind can't really do; a load that isn't 200 URLs asked evenly; and a purge, which with two caches has to reach the one holding the page.
+A cache that dies with its node and no warning, which kind can't really do; a load that isn't 200 URLs asked evenly; and a purge, which with two caches has to reach the one holding the page.
 
 ## Where your folder ends
 

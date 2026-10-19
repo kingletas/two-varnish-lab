@@ -1,6 +1,6 @@
 # Between Parts 3 and 4: tighten what you typed
 
-**This is a review of Parts 1 to 3: what to tighten, and why it has to be that way.** Each step below changes a file. None of them changes what you measured, and the last load in this section proves it: same 600 misses, same 0.917.
+This section reviews Parts 1 to 3: what to tighten, and why. Each step below changes a file. None of them changes what you measured, and step 7 measures again to check.
 
 **What you have at the end:** probes with nothing left to a default, a namespace the folder owns, a cache whose memory is all accounted for, a load whose script can't drift from what ran, and a lab that comes back from the folder in two commands.
 
@@ -77,7 +77,7 @@ kubectl get pods
 
 **Why:**
 
-- **One second is the default, and a default nobody typed is a rule nobody chose.** It's the same reason Part 2 switched grace off. A probe that waits one second is a decision about how slow "too slow" is, and Part 4 puts these pods under load.
+- **One second is the default, and now the file says so.** It's the same reason Part 2 switched grace off. A probe that waits one second is a decision about how slow "too slow" is, and Part 4 puts these pods under load.
 - **Nothing restarted, because you typed what was already true.** The cluster had filled that value in by itself. The file changed; what the pods run under did not.
 
 ## 2. Put the namespace in the folder
@@ -128,8 +128,8 @@ kubectl exec varnish-0 -- sh -c 'du -a /tmp/varnish | sort -n | tail -5'
 **You should see**, with your own letters and digits in the names:
 
 ```text
-96	/tmp/varnish/vcl_boot.1791290294.342243/vgc.so
-100	/tmp/varnish/vcl_boot.1791290294.342243
+96	/tmp/varnish/vcl_boot.1773326294.342243/vgc.so
+100	/tmp/varnish/vcl_boot.1773326294.342243
 81924	/tmp/varnish/_.vsm_child/_.Log.d55843da1e0e4823
 82132	/tmp/varnish/_.vsm_child
 82348	/tmp/varnish
@@ -139,7 +139,7 @@ Sizes are in KB. **One file, `_.Log`, is 80 MB of the 81.**
 
 **Why:**
 
-- **That file is Varnish's shared log.** Every request is written into it, in a ring of fixed size, and `varnishlog` reads from it. Its size is a Varnish parameter, `vsl_space`, which Varnish's documentation gives as 80 MB by default; the file here is 83,886,080 bytes, which is 80 MB exactly.
+- **That file is Varnish's shared log.** Every request is written into it, in a ring of fixed size, and `varnishlog` reads from it. Its size is a Varnish parameter, `vsl_space`, which Varnish's documentation gives as 80 MB by default; the file here is 83,886,080 bytes, which is 80 MiB exactly.
 - **`vgc.so` is your VCL.** Varnish turns `default.vcl` into C, compiles it, and loads the result from this folder. Remember that for step 6: whatever this folder is mounted on has to allow running a file from it.
 
 ## 4. Drain a worker, and notice what the command didn't need
@@ -257,10 +257,10 @@ Burstable
 
 **Why:**
 
-- **`malloc,64m` only ever covered the main store.** Short-lived objects go to a second store, named `Transient`, and that one has no ceiling unless you give it one. 33,554,432 bytes is the 32 MB you just typed.
+- **`malloc,64m` only ever covered the main store.** Short-lived objects go to a second store, named `Transient`, and that one has no ceiling unless you give it one. 33,554,432 bytes is the 32 MiB you just typed.
 - **The ceiling has a price.** When that store is full, a request that needs it's answered with an error, a 503. Here nothing uses it (`g_bytes` reads 0), which is why 32 MB is safe in the lab. On a real store it's a number to size from what the store uses, not one to copy. That's Varnish's documented behaviour; the lab doesn't fill the store to show it.
 - **Request equal to limit, for the cache and only for the cache.** When a node runs short of memory, Kubernetes evicts first the pods that are using more than they requested. That's its documented order; this lab doesn't show it. A cache that requests everything it may use is never in that group, and for a cache, being evicted means starting cold.
-- **`Burstable`, still.** The class would be `Guaranteed` only with a CPU limit equal to the CPU request, and Part 1 step 8 left the CPU limit out on purpose. Don't say this pod is Guaranteed. Say its memory request equals its limit, and why.
+- **`Burstable`, still.** The class would be `Guaranteed` only with a CPU limit equal to the CPU request, and Part 1 step 8 left the CPU limit out on purpose. So the pod isn't `Guaranteed`; only its memory request equals its limit.
 - **Liveness now waits 60 seconds, not 30.** A restart is the most expensive thing that can happen to a cache: it comes back empty. A busy Varnish may answer its probe late, and a restart at that moment empties the cache exactly when it's needed. The router's liveness was already at 6; the origin's stays at 3, because an origin holds nothing.
 
 Now take one reading to compare with after the next step:
@@ -288,7 +288,7 @@ About 100 MB in use, and 84 of it is `file`: the kernel's copy of that log file.
 
 ## 6. Put Varnish's working folder in memory, with a size
 
-That log is written on every request, and so far it sits on the container's disk. Varnish's own guidance is to keep this folder in memory. Add a second mount and a second volume to `04-varnish.yaml`. The container's `volumeMounts` now reads:
+That log is written on every request, and so far it sits on the container's disk. The usual advice is to keep this folder in memory. Add a second mount and a second volume to `04-varnish.yaml`. The container's `volumeMounts` now reads:
 
 ```yaml
           volumeMounts:
@@ -330,15 +330,15 @@ kubectl exec varnish-0 -- sh -c 'grep " /tmp/varnish " /proc/mounts; df -h /tmp/
 tmpfs /tmp/varnish tmpfs rw,relatime,size=131072k,inode64,noswap 0 0
 tmpfs           128M   81M   48M  63% /tmp/varnish
 total 12
-drwxrwxrwt 7 root    root     180 Oct  6 12:39 .
-drwxrwxrwt 1 root    root    4096 Oct  6 12:39 ..
--rw-r--r-- 1 varnish varnish    1 Oct  6 12:39 _.pid
--rw-r----- 1 varnish varnish  256 Oct  6 12:39 _.secret
-drwxr-x--- 2 varnish varnish  880 Oct  6 12:39 _.vsm_child
-drwxr-xr-x 2 varnish varnish  200 Oct  6 12:39 _.vsm_mgt
-drwxr-xr-x 2 varnish varnish   60 Oct  6 12:39 vcl_boot.1791290353.841336
-drwxr-xr-x 2 varnish varnish   40 Oct  6 12:39 vmod_cache
-drwxr-xr-x 2 varnish varnish   40 Oct  6 12:39 worker_tmpdir
+drwxrwxrwt 7 root    root     180 Mar 12 14:39 .
+drwxrwxrwt 1 root    root    4096 Mar 12 14:39 ..
+-rw-r--r-- 1 varnish varnish    1 Mar 12 14:39 _.pid
+-rw-r----- 1 varnish varnish  256 Mar 12 14:39 _.secret
+drwxr-x--- 2 varnish varnish  880 Mar 12 14:39 _.vsm_child
+drwxr-xr-x 2 varnish varnish  200 Mar 12 14:39 _.vsm_mgt
+drwxr-xr-x 2 varnish varnish   60 Mar 12 14:39 vcl_boot.1773326353.841336
+drwxr-xr-x 2 varnish varnish   40 Mar 12 14:39 vmod_cache
+drwxr-xr-x 2 varnish varnish   40 Mar 12 14:39 worker_tmpdir
 ```
 
 Take the same memory reading as in step 5:
@@ -486,7 +486,7 @@ MAIN.cache_miss            351         0.95 Cache misses
 600
 ```
 
-**600 misses, 0.917, and the same 249 and 351 as Part 3 step 9.** Every step of this section came between that run and this one, and the measurement didn't move by one request. That's what a tightening is.
+**600 misses, 0.917, and the same 249 and 351 as Part 3 step 9.** Every step of this section came between that run and this one, and the measurement didn't move by one request.
 
 **Why:**
 
@@ -689,16 +689,8 @@ git commit -m "Probes, namespace, cache memory and the load script made explicit
 
 The `git mv` and `git rm` in step 7 staged their own changes.
 
-## What you can now say, and what you can't yet
+## What this doesn't cover
 
-| You can say | Because you did it |
-|---|---|
-| I know what every megabyte in that cache pod is, and which of it the kernel can take back | Steps 3, 5 and 6 |
-| I set a cache's memory request equal to its limit and can say what that buys and what it doesn't | Step 5 |
-| I have seen a drain refuse, I know why, and I know it leaves the node cordoned | Steps 4 and 8 |
-| The load that produced a number is identified by the name of its ConfigMap | Step 7 |
-| The lab rebuilds from its folder on a pinned Kubernetes version | Steps 9 and 10 |
-
-**Not yet:** anything under failure. In step 4 one drain could take both origins and both routers at the same moment, and nothing in the folder forbids it. That's Part 4.
+Anything under failure. In step 4 one drain could take both origins and both routers at the same moment, and nothing in the folder forbids it. Part 4 covers that.
 
 **Next:** [Part 4: kill one under load](4-kill-one-under-load.md)
