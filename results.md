@@ -12,7 +12,7 @@ One run of each, the drains twice, on 18 and 19 October 2026, on a fresh clone b
 | Router | Nothing: requests routed by URL | 600 | 0 | 0.917 | 318 |
 | Plain Service | The same load sent to the `varnish` Service | 1178 | 0 | 0.836 | 304 |
 | Kill | `varnish-1` deleted at 180 s | 728 | 0 | 0.899 | 304 |
-| Drain | the worker holding `varnish-0`, one router and one origin, drained at 180 s | 699 | 9 | 0.902 | 1805 |
+| Drain, before preStop | the worker holding `varnish-0`, one router and one origin, drained at 180 s, before the router had its preStop sleep (18 October) | 699 | 9 | 0.902 | 1805 |
 | Drain, again | the same | 742 | 11 | 0.895 | 1806 |
 | Drain, router preStop | the same, after the router was given a 5 s preStop sleep (19 October) | 613 | 0 | 0.915 | 316 |
 | Drain, router preStop, again | the same | 729 | 0 | 0.899 | 309 |
