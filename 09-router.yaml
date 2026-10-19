@@ -14,6 +14,8 @@ spec:
       labels:
         app: router
     spec:
+      # The default, written out: it must outlast the preStop sleep below.
+      terminationGracePeriodSeconds: 30
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -28,6 +30,12 @@ spec:
         - name: haproxy
           image: haproxy:3.2-alpine
           args: ["haproxy", "-f", "/cfg/haproxy.cfg"]
+          # A stopping router keeps answering for 5 s, while the Service stops
+          # sending it new requests, before HAProxy is told to stop.
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
           env:
             - name: POD_NAMESPACE
               valueFrom:
