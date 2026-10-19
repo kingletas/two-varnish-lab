@@ -18,7 +18,7 @@ spec:
           command: ["python", "/app/load.py"]
           env:
             - name: TARGET
-              value: "http://varnish"
+              value: "http://router"
             - name: URLS
               value: "200"
             - name: RATE
